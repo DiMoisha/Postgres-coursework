@@ -1,0 +1,237 @@
+			КУРСОВАЯ РАБОТА ПО ПРЕДМЕТУ: Базы данных. PostgreSQL
+
+
+	В качестве практического задания необходимо выполнить курсовой проект. За основу проекта можно взять
+любой сервис на ваше усмотрение. Например, вы можете использовать любую социальную сеть (кроме
+ВКонтакте), интернет-магазин, стриминговый сервис и т.д. Желательно чтобы вы понимали как работает
+приложение, это упростит работу над проектом. Для выбранного сервиса необходимо последовательно
+выполнить следующие шаги:
+1. Проанализировать бизнес-логику приложения и создать структуру базы данных, которая может
+использоваться для хранения данных этого приложения. В базе данных должно быть минимум десять
+таблиц. Если таблиц получается более двадцати то рекомендуется ограничиться частью функционала
+приложения и не превышать это количество. В качестве отчета по этой части проекта необходимо
+приложить команды создания таблиц.
+2. Используя генератор тестовых данных, заполнить созданную БД данными в количестве минимум сто
+строк для тех таблиц, где это имеет смысл. Доработать данные запросами если это необходимо. В
+качестве отчёта приложить дамп БД с данными.
+3. Создать внешние ключи, если они не были созданы на шаге 1 в командах создания таблиц. В качестве
+отчета приложить команды создания внешних ключей.
+4. Создать диаграмму отношений. В качестве отчета приложить файл изображения диаграммы
+отношений.
+5. Создать два сложных (многотабличных) запроса с использованием подзапросов.
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+7. Создать два представления, в основе которых лежат сложные запросы.
+8. Создать пользовательскую функцию.
+9. Создать триггер.
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+
+
+ВЫПОЛНЕНИЕ
+
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+
+-- Выбрать агрегированные данные по видам перевозки-доставки. А именно:
+-- получить по каждому виду продукции на какую сумму продали самовывозом, 
+-- централизацией и сумму доставки.
+-- Вывод должен быть таким:
+-- Ид категории, наименование категории, количество заказов с/в, сумма заказов по с/в, 
+-- количество заказов ц, сумма заказов по ц, сумма доставки.
+
+-- С использованием агрегатного выражения
+SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END)  OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+GROUP BY ct.CategoryId
+ORDER BY ct.CategoryName;
+
+Результат:
+
+"categoryid"	"categoryname"	"orderscountwodelivery"	"ordersumwodelivery"	"orderscountwdelivery"	"ordersumwdelivery"	"deliverysum"
+------------------------------------------------------------------------------------------------------------------------------------------------
+1	"Асфальтобетонные смеси"	68	39938431.00	51	24831127.00	3657756.00
+6	"Асфальтовая крошка и гранулят"	53	28442539.00	68	35547104.00	2728778.00
+2	"Бетонные смеси"	80	38801722.00	100	50134493.00	4144193.00
+3	"Битумные эмульсии и мастики"	81	42543619.00	52	25231109.00	4068472.00
+7	"Услуги"	28	15335336.00	36	15292676.00	1405235.00
+5	"Цветной асфальт"	90	46689552.00	91	40903194.00	4575672.00
+4	"Штучный товар"	102	50725131.00	100	48335938.00	5308595.00
+
+
+
+-- С использованием оконных функций
+SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+ORDER BY ct.CategoryName;
+
+Результат:
+
+"categoryid"	"categoryname"	"orderscountwodelivery"	"ordersumwodelivery"	"orderscountwdelivery"	"ordersumwdelivery"	"deliverysum"
+------------------------------------------------------------------------------------------------------------------------------------------------
+1	"Асфальтобетонные смеси"	68	39938431.00	51	24831127.00	3657756.00
+6	"Асфальтовая крошка и гранулят"	53	28442539.00	68	35547104.00	2728778.00
+2	"Бетонные смеси"	80	38801722.00	100	50134493.00	4144193.00
+3	"Битумные эмульсии и мастики"	81	42543619.00	52	25231109.00	4068472.00
+7	"Услуги"	28	15335336.00	36	15292676.00	1405235.00
+5	"Цветной асфальт"	90	46689552.00	91	40903194.00	4575672.00
+4	"Штучный товар"	102	50725131.00	100	48335938.00	5308595.00
+
+
+Результаты совпадают!
+
+
+
+Второй запрос:
+
+-- Вывести для всех пользователей сумму заказов и количество отзывов. 
+-- Дополнительно вывести ранг пользователя поколичеству заказов и количеству отзывов.
+-- Отсортировать вывод по имени пользователя.
+
+WITH usersorders (userid, username, orderscount)
+AS 
+(
+	SELECT DISTINCT u.userid, u.username, COUNT(o.orderid) OVER (PARTITION BY o.userid)
+	FROM users u LEFT JOIN orders o ON u.userid = o.userid
+),
+usersreviews (userid, username, reviewscount)
+AS 
+(
+	SELECT DISTINCT u.userid, u.username, COUNT(r.reviewid) OVER (PARTITION BY r.userid)
+	FROM users u LEFT JOIN reviews r ON u.userid = r.userid
+)
+SELECT  usersorders.UserId, 
+		usersorders.UserName, 
+		OrdersCount,
+		ReviewsCount,
+		DENSE_RANK() OVER (ORDER BY orderscount) AS UserOrdersRank, 
+		DENSE_RANK() OVER (ORDER BY reviewscount) AS UserReviewsRank
+FROM usersorders INNER JOIN usersreviews ON usersorders.userid = usersreviews.userid
+ORDER BY username;
+
+Результат:
+
+"userid"	"username"	"orderscount"	"reviewscount"	"userordersrank"	"userreviewsrank"
+--------------------------------------------------------------------------------------------------------------
+53	"Aaron Wyatt"		5	0	5	1
+75	"Aidan Larsen"		6	3	6	4
+42	"Aiko Barrett"		3	2	3	3
+15	"Alan Jacobson"		3	0	3	1
+59	"Alexis Fields"		7	1	7	2
+10	"Alfreda Powers"	3	0	3	1
+62	"Aphrodite Johnson"	5	1	5	2
+43	"Aquila Powell"		2	2	2	3
+79	"Audra Hines"		9	2	9	3
+78	"Avye Fry"		13	4	11	5
+39	"Barrett Quinn"		5	2	5	3
+97	"Berk Hughes"		6	1	6	2
+68	"Brianna Brennan"	6	0	6	1
+84	"Brock Ward"		7	2	7	3
+35	"Bruce Lowe"		5	0	5	1
+6	"Buckminster Andrews"	1	1	1	2
+64	"Buffy Moran"	5	1	5	2
+32	"Cailin Black"	5	1	5	2
+11	"Candace Carson"	6	5	6	6
+60	"Carissa Beach"	1	1	1	2
+5	"Carson Salazar"	4	1	4	2
+44	"Catherine Fields"	3	1	3	2
+9	"Channing King"	6	1	6	2
+98	"Chase Valdez"	7	0	7	1
+56	"Cherokee Lane"	3	3	3	4
+81	"Cheyenne Abbott"	4	2	4	3
+87	"Christine Mcneil"	2	1	2	2
+82	"Dalton Peters"	5	1	5	2
+33	"Daphne Haley"	3	2	3	3
+74	"Darius Schwartz"	5	0	5	1
+25	"Darryl Carpenter"	7	2	7	3
+80	"Declan Bradford"	10	1	10	2
+40	"Declan Olsen"	9	2	9	3
+20	"Dieter Castaneda"	2	1	2	2
+23	"Dominique Gardner"	3	2	3	3
+17	"Dustin York"	3	0	3	1
+22	"Eliana Ramirez"	2	1	2	2
+50	"Elmo Campos"	4	1	4	2
+57	"Eugenia Jacobs"	3	0	3	1
+36	"Evan Ryan"	7	0	7	1
+4	"Fleur Kennedy"	4	0	4	1
+19	"Fritz Donaldson"	4	0	4	1
+92	"Garrison Pennington"	6	0	6	1
+21	"Gretchen Barr"	6	1	6	2
+26	"Guy Castro"	4	1	4	2
+90	"Hakeem Reed"	6	1	6	2
+49	"Haley Compton"	3	0	3	1
+69	"Harper Lucas"	5	1	5	2
+52	"Henry Ramos"	5	0	5	1
+28	"Hillary Gamble"	7	3	7	4
+48	"Hope Hicks"	3	1	3	2
+47	"Igor Jenkins"	7	0	7	1
+46	"India Park"	4	1	4	2
+72	"Isaiah Macias"	8	4	8	5
+41	"Jamal Monroe"	3	0	3	1
+45	"Jena Wolf"	2	0	2	1
+3	"John Fry"	6	0	6	1
+24	"Kato Griffith"	5	1	5	2
+38	"Keiko Cleveland"	5	0	5	1
+89	"Kelly Mcguire"	1	3	1	4
+66	"Kenneth Kline"	6	2	6	3
+86	"Kirk Melendez"	8	1	8	2
+55	"Kyla Compton"	4	1	4	2
+100	"Lev Conley"	5	0	5	1
+70	"Libby Shaffer"	5	2	5	3
+99	"Linda Mcguire"	7	0	7	1
+14	"Madeline Cantu"	5	1	5	2
+63	"Mark Holland"	4	4	4	5
+1	"Mary Chapman"	3	0	3	1
+27	"Maxine Wade"	5	0	5	1
+16	"Neil Brennan"	4	1	4	2
+77	"Neve Hess"	8	3	8	4
+65	"Nicholas Griffin"	5	2	5	3
+61	"Noble Clarke"	4	1	4	2
+76	"Pandora Olsen"	8	1	8	2
+85	"Pandora Williamson"	3	0	3	1
+54	"Piper Pate"	2	0	2	1
+91	"Quentin Ferguson"	4	0	4	1
+58	"Quin Hutchinson"	6	0	6	1
+37	"Quin Thomas"	7	1	7	2
+95	"Quon Kirk"	8	0	8	1
+7	"Quon Salas"	4	0	4	1
+34	"Quynn Parks"	7	2	7	3
+8	"Rajah Duffy"	7	1	7	2
+51	"Ralph Kane"	5	0	5	1
+67	"Rama Cook"	6	1	6	2
+83	"Rinah Keller"	4	0	4	1
+94	"Rowan Hunter"	3	1	3	2
+88	"Ruby Mueller"	7	0	7	1
+96	"Rudyard Whitley"	6	1	6	2
+18	"Samantha Mcpherson"	5	0	5	1
+73	"Sebastian Bowman"	3	2	3	3
+93	"Serina Bell"	4	0	4	1
+71	"Shafira Reese"	3	0	3	1
+29	"Susan Nielsen"	5	0	5	1
+12	"Tallulah Lawson"	7	0	7	1
+13	"Thor Sharpe"	6	1	6	2
+31	"Ulric Lambert"	5	1	5	2
+2	"Xenos Valencia"	5	1	5	2
+30	"Zephania Flores"	8	1	8	2
+
+
+

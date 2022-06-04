@@ -1,0 +1,122 @@
+		КУРСОВАЯ РАБОТА ПО ПРЕДМЕТУ: Базы данных. PostgreSQL
+
+
+	В качестве практического задания необходимо выполнить курсовой проект. За основу проекта можно взять
+любой сервис на ваше усмотрение. Например, вы можете использовать любую социальную сеть (кроме
+ВКонтакте), интернет-магазин, стриминговый сервис и т.д. Желательно чтобы вы понимали как работает
+приложение, это упростит работу над проектом. Для выбранного сервиса необходимо последовательно
+выполнить следующие шаги:
+1. Проанализировать бизнес-логику приложения и создать структуру базы данных, которая может
+использоваться для хранения данных этого приложения. В базе данных должно быть минимум десять
+таблиц. Если таблиц получается более двадцати то рекомендуется ограничиться частью функционала
+приложения и не превышать это количество. В качестве отчета по этой части проекта необходимо
+приложить команды создания таблиц.
+2. Используя генератор тестовых данных, заполнить созданную БД данными в количестве минимум сто
+строк для тех таблиц, где это имеет смысл. Доработать данные запросами если это необходимо. В
+качестве отчёта приложить дамп БД с данными.
+3. Создать внешние ключи, если они не были созданы на шаге 1 в командах создания таблиц. В качестве
+отчета приложить команды создания внешних ключей.
+4. Создать диаграмму отношений. В качестве отчета приложить файл изображения диаграммы
+отношений.
+5. Создать два сложных (многотабличных) запроса с использованием подзапросов.
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+7. Создать два представления, в основе которых лежат сложные запросы.
+8. Создать пользовательскую функцию.
+9. Создать триггер.
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+
+
+ВЫПОЛНЕНИЕ
+
+5. Создаем два сложных (многотабличных) запроса с использованием подзапросов.
+
+Первый запрос:
+-- Выбрать пользователя, у которого самая большая сумма заказов. Вывести информацию:
+-- о пользователе - ID, имя в системе, полное имя, телефон, email,  
+-- о сумме заказов и товаре, который пользователь заказывал чаще всего - наименование товара и количество заказов. 
+
+SELECT 
+	o.UserId, 
+	(SELECT username FROM users WHERE userid = o.userid) UserName,
+	(SELECT fullname FROM userdetails WHERE userid = o.userid) UserFullName,
+	(SELECT tel FROM userdetails WHERE userid = o.userid) UserTel,
+	(SELECT email FROM userdetails WHERE userid = o.userid) UserEmail,
+	SUM(o.ordersum + o.deliverysum) orderstotalsum,
+	(
+		SELECT productname
+		FROM products 
+		WHERE productid = (
+			SELECT productid FROM (
+				SELECT d.productid, COUNT(d.productid) ordercount
+				FROM orderdetails d
+				WHERE d.orderid IN (SELECT orderid FROM orders WHERE userid = o.userid)
+				GROUP BY d.productid
+				ORDER BY ordercount DESC
+				LIMIT 1
+			) po
+		)
+	) PopularProductName,
+	(
+		SELECT ordercount FROM (
+			SELECT d.productid, COUNT(d.productid) ordercount
+			FROM orderdetails d
+			WHERE d.orderid IN (SELECT orderid FROM orders WHERE userid = o.userid)
+			GROUP BY d.productid
+			ORDER BY ordercount DESC
+			LIMIT 1
+		) po
+	) PopularProductOrderCount
+FROM orders o
+GROUP BY o.userid 
+ORDER BY orderstotalsum DESC
+LIMIT 1;
+
+
+Результат:
+
+"userid"	"username"	"userfullname"	"usertel"	"useremail"	"orderstotalsum"	"popularproductname"	"popularproductordercount"
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+78	"Avye Fry"	"Shaeleigh Munoz"	"1-648-598-8285"	"duis.elementum@icloud.org"	6740088.00	"quam quis diam."	2
+
+
+
+
+
+Второй запрос:
+-- Выбрать 10 самых популярных товаров в категории "Бетонные смеси" (categoryid = 2)
+-- Вывести ID и наименование товара, количество заказов, сумму и среднюю цену проданного товара
+
+SELECT 
+	d.ProductId, 
+	(SELECT productname FROM products WHERE productid = d.productid) ProductName,
+	COUNT(d.orderid) OrdersCount,
+	SUM(d.sm) OrdersSum,
+	CAST(AVG(d.price) AS numeric(10,2)) AvgPrice
+FROM orderdetails d
+WHERE d.productid IN (
+	SELECT prod.productid 
+	FROM products prod 
+	WHERE prod.categoryid = (SELECT categoryid FROM categories WHERE categoryname = 'Бетонные смеси')
+)
+GROUP BY d.ProductId
+ORDER BY OrdersCount DESC, d.ProductId
+LIMIT 10;
+
+Результат:
+
+"productid"	"productname"	"orderscount"	"orderssum"	"avgprice"
+-------------------------------------------------------------------------------------------
+139	"ante. Vivamus non lorem vitae"	13	262537675.00	603892.00
+137	"fringilla cursus purus."	11	95148250.00	377348.27
+141	"Morbi vehicula. Pellentesque"	11	78928168.00	451261.00
+31	"Fusce aliquam, enim nec"	9	153098601.00	568340.11
+71	"Nulla eu neque pellentesque"	9	109180872.00	574169.56
+8	"Proin vel nisl. Quisque"	8	104810196.00	512175.50
+14	"porttitor vulputate, posuere vulputate,"	8	102184620.00	384181.00
+79	"montes,"	8	107025501.00	453149.75
+32	"lectus"	7	89943392.00	392828.29
+81	"metus. Aliquam erat"	7	112280941.00	587331.71

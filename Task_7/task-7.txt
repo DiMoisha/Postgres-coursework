@@ -1,0 +1,96 @@
+		КУРСОВАЯ РАБОТА ПО ПРЕДМЕТУ: Базы данных. PostgreSQL
+
+
+	В качестве практического задания необходимо выполнить курсовой проект. За основу проекта можно взять
+любой сервис на ваше усмотрение. Например, вы можете использовать любую социальную сеть (кроме
+ВКонтакте), интернет-магазин, стриминговый сервис и т.д. Желательно чтобы вы понимали как работает
+приложение, это упростит работу над проектом. Для выбранного сервиса необходимо последовательно
+выполнить следующие шаги:
+1. Проанализировать бизнес-логику приложения и создать структуру базы данных, которая может
+использоваться для хранения данных этого приложения. В базе данных должно быть минимум десять
+таблиц. Если таблиц получается более двадцати то рекомендуется ограничиться частью функционала
+приложения и не превышать это количество. В качестве отчета по этой части проекта необходимо
+приложить команды создания таблиц.
+2. Используя генератор тестовых данных, заполнить созданную БД данными в количестве минимум сто
+строк для тех таблиц, где это имеет смысл. Доработать данные запросами если это необходимо. В
+качестве отчёта приложить дамп БД с данными.
+3. Создать внешние ключи, если они не были созданы на шаге 1 в командах создания таблиц. В качестве
+отчета приложить команды создания внешних ключей.
+4. Создать диаграмму отношений. В качестве отчета приложить файл изображения диаграммы
+отношений.
+5. Создать два сложных (многотабличных) запроса с использованием подзапросов.
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+7. Создать два представления, в основе которых лежат сложные запросы.
+8. Создать пользовательскую функцию.
+9. Создать триггер.
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+
+
+ВЫПОЛНЕНИЕ
+
+7. Создать два представления, в основе которых лежат сложные запросы.
+
+-- Создадим представления, которые упростят выбор данных для журнала заказов, для вывода списка отзывов.
+
+-- Шапки заказов
+CREATE OR REPLACE VIEW orderslist AS
+SELECT 
+	o.orderid,
+  	o.userid,
+	o.orderstatusid,
+	s.status,
+  	o.customername,
+  	o.customertel,
+  	o.customeremail,
+  	o.contactperson,
+  	o.isdelivery,
+	(CASE WHEN o.isdelivery = true THEN 'Есть доставка' ELSE 'Самовывоз' END) delivery, 
+  	o.deliveryaddress,
+  	o.isonlinepay,
+	(CASE WHEN o.isonlinepay = true THEN 'On-line оплата' ELSE 'Оплата наличными или картой' END) payment, 
+  	o.inn,
+  	o.bik,
+  	o.rasch,
+  	o.bank,
+  	o.ordernote,
+  	o.ordertime,
+  	o.ordersum,
+  	o.deliverysum,
+	(o.ordersum + o.deliverysum) totalsum
+FROM orders o INNER JOIN orderstatus s ON o.orderstatusid = s.orderstatusid;
+SELECT * FROM orderslist;
+
+-- Детали заказов
+CREATE OR REPLACE VIEW orderdetailslist AS
+SELECT
+  d.orderdetailid,
+  d.orderid,
+  d.cartid,
+  pr.categoryid,
+  ct.categoryname,
+  d.productid,
+  pr.productname,
+  pr.unit,
+  d.quantity,
+  d.price,
+  d.sm
+FROM orderdetails d INNER JOIN products pr ON d.productid = pr.productid
+					INNER JOIN categories ct ON pr.categoryid = ct.categoryid;
+SELECT * FROM orderdetailslist;
+
+-- Список отзывов за последний месяц
+CREATE OR REPLACE VIEW reviewslist AS 
+SELECT
+	r.reviewid,
+	u.userid,
+	u.username,
+	u.email useremail,
+	r.reviewtime,
+	r.reviewtext
+FROM reviews r INNER JOIN users u ON r.userid = u.userid
+WHERE reviewtime > now() - interval '1 month';
+SELECT * FROM reviewslist;

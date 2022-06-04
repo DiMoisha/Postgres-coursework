@@ -1,0 +1,69 @@
+			КУРСОВАЯ РАБОТА ПО ПРЕДМЕТУ: Базы данных. PostgreSQL
+
+
+	В качестве практического задания необходимо выполнить курсовой проект. За основу проекта можно взять
+любой сервис на ваше усмотрение. Например, вы можете использовать любую социальную сеть (кроме
+ВКонтакте), интернет-магазин, стриминговый сервис и т.д. Желательно чтобы вы понимали как работает
+приложение, это упростит работу над проектом. Для выбранного сервиса необходимо последовательно
+выполнить следующие шаги:
+1. Проанализировать бизнес-логику приложения и создать структуру базы данных, которая может
+использоваться для хранения данных этого приложения. В базе данных должно быть минимум десять
+таблиц. Если таблиц получается более двадцати то рекомендуется ограничиться частью функционала
+приложения и не превышать это количество. В качестве отчета по этой части проекта необходимо
+приложить команды создания таблиц.
+2. Используя генератор тестовых данных, заполнить созданную БД данными в количестве минимум сто
+строк для тех таблиц, где это имеет смысл. Доработать данные запросами если это необходимо. В
+качестве отчёта приложить дамп БД с данными.
+3. Создать внешние ключи, если они не были созданы на шаге 1 в командах создания таблиц. В качестве
+отчета приложить команды создания внешних ключей.
+4. Создать диаграмму отношений. В качестве отчета приложить файл изображения диаграммы
+отношений.
+5. Создать два сложных (многотабличных) запроса с использованием подзапросов.
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+7. Создать два представления, в основе которых лежат сложные запросы.
+8. Создать пользовательскую функцию.
+9. Создать триггер.
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+
+
+ВЫПОЛНЕНИЕ
+
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+Запрос из 6 пункта.
+
+-- С использованием агрегатного выражения
+SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END)  OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+GROUP BY ct.CategoryId
+ORDER BY ct.CategoryName;
+
+-- С использованием оконных функций
+SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+ORDER BY ct.CategoryName;

@@ -1,0 +1,218 @@
+			КУРСОВАЯ РАБОТА ПО ПРЕДМЕТУ: Базы данных. PostgreSQL
+
+
+	В качестве практического задания необходимо выполнить курсовой проект. За основу проекта можно взять
+любой сервис на ваше усмотрение. Например, вы можете использовать любую социальную сеть (кроме
+ВКонтакте), интернет-магазин, стриминговый сервис и т.д. Желательно чтобы вы понимали как работает
+приложение, это упростит работу над проектом. Для выбранного сервиса необходимо последовательно
+выполнить следующие шаги:
+1. Проанализировать бизнес-логику приложения и создать структуру базы данных, которая может
+использоваться для хранения данных этого приложения. В базе данных должно быть минимум десять
+таблиц. Если таблиц получается более двадцати то рекомендуется ограничиться частью функционала
+приложения и не превышать это количество. В качестве отчета по этой части проекта необходимо
+приложить команды создания таблиц.
+2. Используя генератор тестовых данных, заполнить созданную БД данными в количестве минимум сто
+строк для тех таблиц, где это имеет смысл. Доработать данные запросами если это необходимо. В
+качестве отчёта приложить дамп БД с данными.
+3. Создать внешние ключи, если они не были созданы на шаге 1 в командах создания таблиц. В качестве
+отчета приложить команды создания внешних ключей.
+4. Создать диаграмму отношений. В качестве отчета приложить файл изображения диаграммы
+отношений.
+5. Создать два сложных (многотабличных) запроса с использованием подзапросов.
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+7. Создать два представления, в основе которых лежат сложные запросы.
+8. Создать пользовательскую функцию.
+9. Создать триггер.
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+
+
+ВЫПОЛНЕНИЕ
+
+1. В качестве темы курсовой работы выступит интернет-магазин асфальто-бетонного завода. Будет 
+использоваться упрощенная логика работы с минимальным набором таблиц. Функционал будет включать в себя:
+а) Систему управления авторизацией и аутентификацией пользователей.
+б) Список товаров и услуг с разделением по категориям.
+в) Возможность заказа товаров через корзину.
+г) Личный кабинет пользователя-покупателя для управления своим аккаунтом, корзиной и заказами.
+д) Также в личном кабинете покупателя доступна возможность оставить отзыв.
+е) Личный кабинет администратора, позволяющий управлять контентом сайта, пользователями, заказами.
+ж) Новостная лента.
+з) Обратная связь.
+
+К курсовой будет приложен xls-файл со структурой таблиц.
+Наименование базы данных, таблиц и полей будет выполнено латинским алфавитом строчными буквами без
+использования пробелов и знака подчеркивания.
+
+Скрипт создания базы данных и таблиц:
+
+postgres=# CREATE DATABASE abzdb;
+CREATE DATABASE
+postgres=# GRANT ALL PRIVILEGES ON DATABASE abzdb TO gb_user;
+GRANT
+
+BEGIN;
+-- Таблица: пользователи (имена входа)
+CREATE TABLE IF NOT EXISTS users 
+(
+  userid SERIAL PRIMARY KEY,
+  username VARCHAR(150) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  login VARCHAR(90) UNIQUE,
+  passwd VARCHAR(250),
+  lastlogintime TIMESTAMP
+);
+
+-- Таблица: реквизиты пользователей
+CREATE TABLE IF NOT EXISTS userdetails 
+(
+  userdetailid SERIAL PRIMARY KEY,
+  userid INT NOT NULL,
+  fullname VARCHAR(250),
+  deliveryaddress TEXT,
+  tel VARCHAR(250),
+  contactperson VARCHAR(250),
+  email VARCHAR(250),
+  inn VARCHAR(30),
+  bik VARCHAR(30),
+  rasch VARCHAR(250),
+  bank VARCHAR(250)
+);
+
+-- Таблица: роли пользователей
+CREATE TABLE IF NOT EXISTS roles 
+(
+  roleid SERIAL PRIMARY KEY,
+  rolename VARCHAR(150) NOT NULL UNIQUE
+);
+
+-- Таблица: назначение пользователям ролей
+CREATE TABLE IF NOT EXISTS userroles 
+(
+  userid INT NOT NULL,
+  roleid INT NOT NULL,
+  PRIMARY KEY (userid, roleid)
+);
+
+-- Таблица: состояния заказов
+CREATE TABLE IF NOT EXISTS orderstatus 
+(
+  orderstatusid SERIAL PRIMARY KEY,
+  status VARCHAR(150) NOT NULL UNIQUE,
+  ismark BOOLEAN DEFAULT false
+);
+
+-- Таблица: корзина покупок
+CREATE TABLE IF NOT EXISTS cart	
+(			
+  cartid SERIAL PRIMARY KEY,
+  userid INT NOT NULL,
+  productid INT NOT NULL,
+  orderstatusid INT NOT NULL,
+  quantity NUMERIC(12,2) NOT NULL DEFAULT 0,
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  sm NUMERIC(12,2) NOT NULL DEFAULT 0
+);
+
+-- Таблица: заказы (шапка)
+CREATE TABLE IF NOT EXISTS orders
+(				
+  orderid SERIAL PRIMARY KEY,
+  userid INT NOT NULL,
+  orderstatusid INT NOT NULL,
+  customername VARCHAR(250),
+  customertel VARCHAR(250),
+  customeremail VARCHAR(250),
+  contactperson VARCHAR(250),
+  isdelivery BOOLEAN,
+  deliveryaddress TEXT,
+  isonlinepay BOOLEAN,
+  inn VARCHAR(30),
+  bik VARCHAR(30),
+  rasch VARCHAR(250),
+  bank VARCHAR(250),
+  ordernote TEXT,
+  ordertime TIMESTAMP,
+  ordersum NUMERIC(12,2) NOT NULL DEFAULT 0,
+  deliverysum NUMERIC(12,2) NOT NULL DEFAULT 0,
+  lastchagestime TIMESTAMP
+);
+
+-- Таблица: детали заказов (список заказанных товаров) через триггер обновляет записи cart
+CREATE TABLE IF NOT EXISTS orderdetails	
+(			
+  orderdetailid	 SERIAL PRIMARY KEY,
+  orderid INT NOT NULL,
+  cartid INT,
+  productid INT NOT NULL,
+  quantity NUMERIC(12,3) NOT NULL DEFAULT 0,
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  sm NUMERIC(12,2) NOT NULL DEFAULT 0
+);
+
+-- Таблица: категории товаров
+CREATE TABLE IF NOT EXISTS categories
+(				
+  categoryid SERIAL PRIMARY KEY,
+  categoryname VARCHAR(150) NOT NULL,
+  tabindex SMALLINT,
+  ismark BOOLEAN DEFAULT false
+);
+
+-- Таблица: товары
+CREATE TABLE IF NOT EXISTS products
+(				
+  productid SERIAL PRIMARY KEY,
+  categoryid INT NOT NULL,
+  productname VARCHAR(250) NOT NULL,
+  tabindex SMALLINT,
+  descr TEXT,
+  unit VARCHAR(60),
+  pricewonds NUMERIC(10,2) NOT NULL DEFAULT 0,
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  creationtime TIMESTAMP,
+  htmlpagetitle VARCHAR(250),
+  htmlmetadescr VARCHAR(250),
+  htmlmetakeywords VARCHAR(250),
+  ismark BOOLEAN DEFAULT false
+);
+
+-- Таблица: файлы изображений товаров
+CREATE TABLE IF NOT EXISTS productpics
+(				
+  productpicid SERIAL PRIMARY KEY,
+  productid INT NOT NULL,
+  picname VARCHAR(250) NOT NULL
+);
+
+-- Таблица: отзывы зарегистированных пользователей	
+CREATE TABLE IF NOT EXISTS reviews
+(				
+  reviewid SERIAL PRIMARY KEY,
+  userid INT NOT NULL,
+  reviewtime TIMESTAMP,
+  reviewtext TEXT NOT NULL
+);
+
+-- Таблица: новости	
+CREATE TABLE IF NOT EXISTS news
+(				
+  newsid SERIAL PRIMARY KEY,
+  newstitle TEXT NOT NULL,
+  newsdate DATE,
+  newsdetails TEXT
+);
+
+-- Таблица: обратная связь		
+CREATE TABLE IF NOT EXISTS feedback
+(				
+  feedbackid SERIAL PRIMARY KEY,
+  feedbacktime TIMESTAMP,
+  username VARCHAR(250) NOT NULL,
+  useremail VARCHAR(250) NOT NULL,
+  usertext TEXT
+);
+COMMIT;

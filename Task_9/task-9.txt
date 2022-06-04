@@ -1,0 +1,135 @@
+		КУРСОВАЯ РАБОТА ПО ПРЕДМЕТУ: Базы данных. PostgreSQL
+
+
+	В качестве практического задания необходимо выполнить курсовой проект. За основу проекта можно взять
+любой сервис на ваше усмотрение. Например, вы можете использовать любую социальную сеть (кроме
+ВКонтакте), интернет-магазин, стриминговый сервис и т.д. Желательно чтобы вы понимали как работает
+приложение, это упростит работу над проектом. Для выбранного сервиса необходимо последовательно
+выполнить следующие шаги:
+1. Проанализировать бизнес-логику приложения и создать структуру базы данных, которая может
+использоваться для хранения данных этого приложения. В базе данных должно быть минимум десять
+таблиц. Если таблиц получается более двадцати то рекомендуется ограничиться частью функционала
+приложения и не превышать это количество. В качестве отчета по этой части проекта необходимо
+приложить команды создания таблиц.
+2. Используя генератор тестовых данных, заполнить созданную БД данными в количестве минимум сто
+строк для тех таблиц, где это имеет смысл. Доработать данные запросами если это необходимо. В
+качестве отчёта приложить дамп БД с данными.
+3. Создать внешние ключи, если они не были созданы на шаге 1 в командах создания таблиц. В качестве
+отчета приложить команды создания внешних ключей.
+4. Создать диаграмму отношений. В качестве отчета приложить файл изображения диаграммы
+отношений.
+5. Создать два сложных (многотабличных) запроса с использованием подзапросов.
+6. Создать два сложных запроса с использованием объединения JOIN и без использования подзапросов.
+7. Создать два представления, в основе которых лежат сложные запросы.
+8. Создать пользовательскую функцию.
+9. Создать триггер.
+10. Для одного из запросов, созданных в пункте 6, провести оптимизацию. В качестве отчета приложить
+планы выполнения запроса, ваш анализ и показать действия, которые улучшили эффективность
+запроса.
+
+
+
+
+ВЫПОЛНЕНИЕ
+
+9. Создать триггер.
+-- Триггер, который срабатывает на insert в таблицу orderdetails
+-- меняет статус заказа в cart на "Новый". Т.е. orderstatusid = 2 
+CREATE OR REPLACE FUNCTION insertOrderDetailsUpdateCartTrigger()
+RETURNS TRIGGER AS
+$$
+BEGIN
+UPDATE cart SET orderstatusid = 2 WHERE cartid = NEW.cartid;
+RETURN NEW;
+END
+$$
+LANGUAGE PLPGSQL;
+
+-- Триггер, который обновляет в заказе сумму заказанных товаров
+CREATE OR REPLACE FUNCTION updateOrdersRecalcOrderSumTrigger()
+RETURNS TRIGGER AS
+$$
+DECLARE newordersum NUMERIC(12,2);
+BEGIN
+newordersum := (SELECT SUM(sm) FROM orderdetails WHERE orderid = NEW.orderid);
+UPDATE orders SET ordersum = newordersum WHERE orderid = NEW.orderid;
+RETURN NEW;
+END
+$$
+LANGUAGE PLPGSQL;
+
+CREATE TRIGGER updateCartFromOrderDetailsOnInsert AFTER INSERT ON orderdetails
+FOR EACH ROW
+EXECUTE FUNCTION insertOrderDetailsUpdateCartTrigger();
+
+CREATE TRIGGER updateOrdersFromDetailsOnInsert AFTER INSERT ON orderdetails
+FOR EACH ROW
+EXECUTE FUNCTION updateOrdersRecalcOrderSumTrigger();
+
+CREATE TRIGGER updateOrdersFromDetailsOnUpdate AFTER UPDATE ON orderdetails
+FOR EACH ROW
+EXECUTE FUNCTION updateOrdersRecalcOrderSumTrigger();
+
+-- Проверяем:
+select * from orderdetails where orderid = 321;
+--"orderdetailid"	"orderid"	"cartid"	"productid"	"quantity"	"price"	"sm"
+-------------------------------------------------------------------------------
+--311	321	267	97	34.000	68638.00	2333692.00
+--356	321	118	72	34.000	316554.00	10762836.00
+--666	321	438	74	7.000	639355.00	4475485.00
+
+select sum(sm) ordersum from orderdetails where orderid = 321;
+--"ordersum"
+------------
+--17572013.00
+
+select * from orders where orderid = 321;
+--"orderid"	"userid"	"orderstatusid"	"customername"	"customertel"	"customeremail"	"contactperson"	"isdelivery"	"deliveryaddress"	"isonlinepay"	"inn"	"bik"	"rasch"	"bank"	"ordernote"	"ordertime"	"ordersum"	"deliverysum"	"lastchagestime"
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--321	3	2	"Gemma Robinson"	"1-911-743-1464"	"parturient@google.ca"	"Athena Page"	false	"906-5547 Magna. St."	false	"(025) 0481 2565"	"4645"	"SE0975361617409816567366"	"Adobe"	"Mauris ut quam vel sapien imperdiet"	"2022-10-25 18:30:18"	100300.00	40872.00	"2022-06-28 15:51:59"
+
+select * from cart where cartid in (select cartid from orderdetails where orderid = 321);
+--"cartid"	"userid"	"productid"	"orderstatusid"	"quantity"	"price"	"sm"
+--------------------------------------------------------------------------------
+--118	83	88	2	43.00	830109.00	35694687.00
+--267	24	6	1	19.00	587259.00	11157921.00
+--438	69	19	1	38.00	691449.00	26275062.00
+
+update orderdetails set quantity = 2, price = 6000, sm = 12000 where  orderdetailid = 311;
+
+select * from orderdetails where orderid = 321;
+-- "orderdetailid"	"orderid"	"cartid"	"productid"	"quantity"	"price"	"sm"
+----------------------------------------------------------------------------------
+-- 356	321	118	72	34.000	316554.00	10762836.00
+-- 666	321	438	74	7.000	639355.00	4475485.00
+-- 311	321	267	97	2.000	6000.00	12000.00
+
+select sum(sm) ordersum from orderdetails where orderid = 321;
+-- "ordersum"
+-- 15250321.00
+
+select ordersum from orders where orderid = 321;
+-- "ordersum"
+-- 15250321.00
+
+select * from cart where cartid in (select cartid from orderdetails where orderid = 321);
+-- "cartid"	"userid"	"productid"	"orderstatusid"	"quantity"	"price"	"sm"
+-- 118	83	88	2	43.00	830109.00	35694687.00
+-- 267	24	6	1	19.00	587259.00	11157921.00
+-- 438	69	19	1	38.00	691449.00	26275062.00
+
+insert into orderdetails (orderid,cartid,productid,quantity,price,sm)
+values (321,438,19,3,2000,6000);
+
+select * from cart where cartid in (select cartid from orderdetails where orderid = 321);
+-- "cartid"	"userid"	"productid"	"orderstatusid"	"quantity"	"price"	"sm"
+-- 118	83	88	2	43.00	830109.00	35694687.00
+-- 267	24	6	1	19.00	587259.00	11157921.00
+-- 438	69	19	2	38.00	691449.00	26275062.00
+
+select ordersum from orders where orderid = 321;
+-- "ordersum"
+-- 15256321.00
+
+
+Как видим - все работает!
