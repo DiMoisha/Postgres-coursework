@@ -37,7 +37,7 @@
 запроса.
 
 
-Запрос из 6 пункта.
+Запросы из 6 пункта.
 
 -- С использованием агрегатного выражения
 SELECT DISTINCT
@@ -54,6 +54,25 @@ FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
 GROUP BY ct.CategoryId
 ORDER BY ct.CategoryName;
 
+Получаем план построения запроса, аналитику и статистику. (сохраняем в картинках pic10-1-....) :
+EXPLAIN (FORMAT JSON) SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END)  OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+GROUP BY ct.CategoryId
+ORDER BY ct.CategoryName;
+
+Видим что этот рапрос работает быстрее чем на оконных функциях и более оптимален. Нет лишней 
+операции Sort. Время выполнения запроса: 49ms
+
+
 -- С использованием оконных функций
 SELECT DISTINCT
 	ct.CategoryId,
@@ -67,3 +86,94 @@ FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
 	INNER JOIN products pr ON d.productid = pr.productid
 	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
 ORDER BY ct.CategoryName;
+
+
+Получаем план построения запроса, аналитику и статистику. (сохраняем в картинках pic10-2-...) :
+EXPLAIN (FORMAT JSON) SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) OVER (PARTITION BY ct.CategoryId) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+ORDER BY ct.CategoryName;
+
+
+Из плана построения запроса очивидно более медленное выполнение запроса чем на агрегатных функциях. В этом запросе есть лишняя 
+операция Sort. Время выполнения запроса: 72ms
+
+
+
+ОПТИМИЗАЦИЯ
+
+Смотрим индексы используются в таблицах:
+SELECT indexname FROM pg_indexes WHERE tablename = 'products';
+SELECT indexname FROM pg_indexes WHERE tablename = 'categories';
+SELECT indexname FROM pg_indexes WHERE tablename = 'orders';
+SELECT indexname FROM pg_indexes WHERE tablename = 'orderdetails';
+
+По результатам выборок видно, что в каждой таблице есть только первичный ключ:
+"indexname"
+"products_pkey" 
+"indexname"
+"categories_pkey" 
+"indexname"
+"orders_pkey" 
+"indexname"
+"orderdetails_pkey" 
+
+С т.з. оптимизации, первый запрос уже вполне оптимален. Можно даже сказать, что первый запрос на Group by - это оптимизация
+запроса на оконнных функциях.
+
+Попробуем провести оптимизацию, путем уменьшения времени запроса. Создадим индексы:
+CREATE INDEX productscategoryidfk ON products (categoryid);
+CREATE INDEX orderdetailsproductidfk ON orderdetails (productid);
+CREATE INDEX orderdetailsorderidfk ON orderdetails (orderid);
+
+И проверяем:
+SELECT indexname FROM pg_indexes WHERE tablename = 'products';
+SELECT indexname FROM pg_indexes WHERE tablename = 'categories';
+SELECT indexname FROM pg_indexes WHERE tablename = 'orders';
+SELECT indexname FROM pg_indexes WHERE tablename = 'orderdetails';
+
+"indexname"
+"orderdetails_pkey"
+"orderdetailsproductidfk"
+"orderdetailsorderidfk"
+
+Индексы созданы.
+
+Обновим статистику по таблицам:
+ANALYZE products;
+ANALYZE categories;
+ANALYZE orders;
+ANALYZE orderdetails;
+
+Проверим еще раз запрос:
+EXPLAIN (FORMAT JSON) SELECT DISTINCT
+	ct.CategoryId,
+	ct.CategoryName,
+	SUM(CASE WHEN o.isdelivery = true THEN 1 ELSE 0 END)  OrdersCountWODelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.ordersum ELSE 0 END) OrderSumWODelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN 1 ELSE 0 END) OrdersCountWDelivery,
+	SUM(CASE WHEN o.isdelivery = false THEN o.ordersum ELSE 0 END) OrderSumWDelivery,
+	SUM(CASE WHEN o.isdelivery = true THEN o.deliverysum ELSE 0 END) DeliverySum
+FROM orders o INNER JOIN orderdetails d ON o.orderid = d.orderid
+	INNER JOIN products pr ON d.productid = pr.productid
+	INNER JOIN categories ct ON pr.categoryid = ct.categoryid
+GROUP BY ct.CategoryId
+ORDER BY ct.CategoryName;
+
+Время выполнения запроса: 25ms
+
+Время сократилось в два раза. 
+Посмотрим план запроса, аналитику и статистику (сохраняем в картинках pic10-optimization-...)
+
+Видим что отдельные итерации запроса стали быстрее. Посмотрим сравнение аналитики планов запроса
+до создания внешних ключей и и после - на картинке pic10-compare.png 
+
+
